@@ -1,0 +1,22 @@
+{% extends "layout.html" %}
+{% block body %}
+<div id="main" class="container">
+    <h2>Kullanicilar</h2>
+    <table class="table table-hover">
+      <tr>
+        <th>#
+        <th>Adi
+        <th>Email
+        <th>Tarih
+      {%- for m  in musteri %}
+      <tr>
+        <td>{{ m.id }}</td>
+        <td> {{ m.adi }}</td>
+        <td>{{ m.email }}</td>
+        <td>{{ m.kayit_tarihi.strftime('%Y-%m-%d %H:%M') }}
+      {%- endfor %}
+    </table>
+    <p>
+  
+</div>
+{% endblock %}
