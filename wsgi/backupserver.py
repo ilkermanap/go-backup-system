@@ -6,7 +6,7 @@ from flask.ext.login import LoginManager
 from werkzeug import secure_filename
 import os
 import hashlib
-
+import glob
 
 from OpenSSL import SSL
 context = SSL.Context(SSL.TLSv1_METHOD)
@@ -25,7 +25,20 @@ login_manager.init_app(app)
 
 login_manager.login_view = 'giris'
 
-
+class Katalog:
+    def __init__(self, email):
+        self.dizin = "%s/%s" % (BACKUP,hashlib.sha256(email).hexdigest())
+        self.dosyalar = {}
+        self.dizin_kontrol()
+    
+    def dizin_kontrol(self):
+        for tarih  in glob.glob("%s/*" % self.dizin):
+            trh = tarih.split("/")[-1]
+            t = {}
+            for katalog in glob.glob("%s/*.katalog.*" % tarih):
+                t[katalog.split("/")[-1]] = os.stat(katalog.replace("katalog.bz2.enc","tar")).st_size / (1000 * 1000 * 1.0)
+            self.dosyalar[trh] = t
+            print trh,  glob.glob("%s/*.katalog.*" % tarih)
 
 class Musteri(db.Model):
     __tablename__ = 'musteri'
@@ -100,6 +113,7 @@ def giris():
         flash('Email ya da sifre yanlis' , 'error')
         return redirect(url_for('giris'))
     login_user(kayitli)
+    
     flash('Logged in successfully')
     return redirect(request.args.get('next') or url_for('index'))
 
@@ -130,6 +144,9 @@ def katalog():
 def load_user(id):
     return Musteri.query.get(int(id))
 
+@app.before_request
+def before_request():
+    g.user = current_user
 
 @app.route('/cikis')
 def cikis():
@@ -139,7 +156,7 @@ def cikis():
 @app.route('/')
 @login_required
 def index():
-    return render_template('index.html', musteri=Musteri.query.all())
+    return render_template('index.html', musteri=Musteri.query.all(), katalog = Katalog(g.user.email))
 
 
 if __name__ == '__main__':

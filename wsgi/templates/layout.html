@@ -26,6 +26,14 @@ body {
 					<ul class="nav">
 						<li class="active"><a href="/">Anasayfa</a></li>
 						<li><a href="/kayit">Yeni kullanici</a></li>
+						{% if g.user.is_authenticated() %}
+  						    <li><a href="{{ url_for('cikis') }}">Cikis</a></li>
+						    <li class="active">{{ g.user.email }} </li>
+						{% endif %}
+					        {% if not g.user.is_authenticated() %}
+						    <li><a href="{{ url_for('giris') }}">Login</a></li>
+   						    <li><a href="{{ url_for('kayit') }}">Register</a></li>
+						{% endif %}
 					</ul>
 				</div>
 				<!--/.nav-collapse -->

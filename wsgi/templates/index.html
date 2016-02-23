@@ -1,22 +1,25 @@
 {% extends "layout.html" %}
 {% block body %}
 <div id="main" class="container">
-    <h2>Kullanicilar</h2>
+    <h2>Kataloglar</h2>
     <table class="table table-hover">
       <tr>
-        <th>#
-        <th>Adi
-        <th>Email
         <th>Tarih
-      {%- for m  in musteri %}
-      <tr>
-        <td>{{ m.id }}</td>
-        <td> {{ m.adi }}</td>
-        <td>{{ m.email }}</td>
-        <td>{{ m.kayit_tarihi.strftime('%Y-%m-%d %H:%M') }}
+        <th>dosya
+	<th>boyu
+      {%- for trh, dosyalar  in katalog.dosyalar.items() %}
+        {%- for  dosya, boy  in dosyalar.items() %}
+
+        <tr>
+          <td>{{ trh }}</td>
+          <td> {{ dosya }}</td>
+          <td> {{ boy }} MB</td>
+        {%- endfor %}
       {%- endfor %}
     </table>
     <p>
-  
+
+
 </div>
+
 {% endblock %}
