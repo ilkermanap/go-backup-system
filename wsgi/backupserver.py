@@ -36,9 +36,15 @@ class Katalog:
             trh = tarih.split("/")[-1]
             t = {}
             for katalog in glob.glob("%s/*.katalog.*" % tarih):
-                t[katalog.split("/")[-1]] = os.stat(katalog.replace("katalog.bz2.enc","tar")).st_size / (1000 * 1000 * 1.0)
+                print "----\n",katalog, "\n------"
+                parts = glob.glob(katalog.replace(".katalog.bz2.enc","-*.tar"))
+                boy = 0
+                for p in  parts:
+                    boy += os.stat(p).st_size / (1000 * 1000 * 1.0)                
+
+                t[katalog.split("/")[-1]] = boy
             self.dosyalar[trh] = t
-            print trh,  glob.glob("%s/*.katalog.*" % tarih)
+
 
 class Musteri(db.Model):
     __tablename__ = 'musteri'
