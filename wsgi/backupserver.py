@@ -1,29 +1,41 @@
-from flask import Flask,session, request, flash, url_for, redirect, render_template, abort ,g
+from flask import Flask,session, request, flash, url_for, redirect, render_template, abort ,g, jsonify
 from flask.ext.login import login_user , logout_user , current_user , login_required
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import relationship
+from sqlalchemy.ext.hybrid import hybrid_property
 from flask.ext.login import LoginManager
+from flask.ext.bcrypt import Bcrypt
 from werkzeug import secure_filename
 import os
 import hashlib
 import glob
+import json
 
 from OpenSSL import SSL
 context = SSL.Context(SSL.TLSv1_METHOD)
-context.use_privatekey_file('server.key')
-context.use_certificate_file('server.crt') 
+context.use_privatekey_file('verimiz.key')
+context.use_certificate_file('verimiz.crt') 
 
 
-BACKUP = "/home/ilker/src/yedekleme-sunucu/wsgi/static/backup"
+BACKUP = "/storage"
 app = Flask(__name__)
 app.config.from_pyfile('backupserver.cfg')
 db = SQLAlchemy(app)
+bcrypt = Bcrypt(app)
 
 
 login_manager = LoginManager()
 login_manager.init_app(app)
 
 login_manager.login_view = 'giris'
+
+def kullanici_onay(em,sf):
+    u = Musteri.query.filter_by(email=em).first()
+    if u  is not None:
+        if u.is_correct_passwd(sf) == True:
+            return u
+    return None
 
 class Katalog:
     def __init__(self, email):
@@ -48,13 +60,22 @@ class Katalog:
 
 class Musteri(db.Model):
     __tablename__ = 'musteri'
-    id = db.Column('id', db.Integer, db.Sequence('musteri_id_seq', start=1, increment=1),primary_key=True)
+    id = db.Column('id', db.Integer,primary_key=True)
     adi = db.Column('adi', db.String(60), index=True)
     email = db.Column(db.String(60), unique=True, index=True)
-    passwd = db.Column(db.String(64))
+    _passwd = db.Column(db.String(64))
     kayit_tarihi = db.Column('kayit_tarihi' , db.DateTime)
+    cihazlar = relationship
 
-    def __init__(self, adi, sifre, email):
+    @hybrid_property
+    def passwd(self):
+        return self._passwd
+
+    @passwd.setter
+    def _set_passwd(self, plaintext):
+        self._passwd = bcrypt.generate_password_hash(plaintext)
+
+    def __init__(self, adi, email, sifre):
         self.adi = adi
         self.email = email
         self.passwd = sifre
@@ -71,18 +92,32 @@ class Musteri(db.Model):
  
     def get_id(self):
         return unicode(self.id)
- 
+
+    def is_correct_passwd(self, plaintext):
+        return bcrypt.check_password_hash(self._passwd, plaintext)
+    
     def __repr__(self):
         return '<Musteri %r>' % (self.adi)
 
+class Cihaz(db.Model):
+    __tablename__ = "cihaz"
+    id = db.Column("id", db.Integer, primary_key=True)
+    no = db.Column("no", db.Integer)
+    adi = db.Column("cihaz", db.String(100))
+    musteri_id = db.Column(db.Integer, db.ForeignKey('musteri.id'))
+
+
+    
 @app.route('/kayit' , methods=['GET','POST'])
 def kayit():
     if request.method == 'GET':
         return render_template('kayit.html')
-    musteri = Musteri(request.form['username'] , request.form['password'],request.form['email'])
+    musteri = Musteri(request.form['username'],request.form['email'], request.form['password'])
     db.session.add(musteri)
     db.session.commit()
-    os.mkdir("%s/%s" % (BACKUP, hashlib.sha256(request.form['email']).hexdigest()))
+    dizin = "%s/%s" % (BACKUP, hashlib.sha256(request.form['email']).hexdigest())
+    if not os.path.isdir(dizin):
+        os.mkdir(dizin)
     flash('Kullanici basariyla eklendi')
     return redirect(url_for('giris'))
  
@@ -92,12 +127,10 @@ def dosya():
     if request.method == "POST":
         email = request.form['email']
         password = request.form['sifre']
-        print email, password, request.files['file'].filename
-        kullanici = Musteri.query.filter_by(email=email,passwd=password).first()
-        print kullanici
+        kullanici = kullanici_onay(email,password)
         if kullanici is  None:
-            return "hatali kullanici"
-
+            return "H-004 Kullanici adi ya da sifresi hatali"
+        
         tarih = request.form['tarih']
         file = request.files['file']
         fname = secure_filename(file.filename)
@@ -108,13 +141,31 @@ def dosya():
         file.save(f)
         return os.popen("sha256sum %s" % f, "r").readlines()[0].split()[0].strip()
 
+
+@app.route("/kontrol", methods = ['POST'])
+def kontrol():
+    if request.method == "GET":
+        return "H-001 Yanlis metod"
+    elif request.method == "POST":
+        email = request.form['username']
+        password = request.form['password']
+        k = Musteri.query.filter_by(email=email).first()
+        s = k.is_correct_passwd(password)
+                
+        if k is None:
+            return "H-002 Kullanici tanimsiz"
+        elif s is False:
+            return "H-003 Yanlis sifre"
+        else:
+            return "T-001 Tamam"
+
 @app.route('/giris',methods=['GET','POST'])
 def giris():
     if request.method == 'GET':
         return render_template('giris.html')
     email = request.form['username']
     password = request.form['password']
-    kayitli = Musteri.query.filter_by(email=email,passwd=password).first()
+    kayitli = kullanici_onay(email,password)
     if kayitli is None:
         flash('Email ya da sifre yanlis' , 'error')
         return redirect(url_for('giris'))
@@ -124,23 +175,70 @@ def giris():
     return redirect(request.args.get('next') or url_for('index'))
 
 
-def kullanici_onay(rq):
-    musteri_email = rq.args.get('email')
-    musteri_sifre = rq.args.get('sifre')
-    return(Musteri.query.filter_by(email=email,passwd=musteri_sifre).first())
-
-
 @app.route('/gonder', methods = ['POST'])
 def gonder():
-    kayitli = kullanici_onay(request)
+    em = request.form['email']
+    sf = request.form['sifre']
+    kayitli = kullanici_onay(em,sf)
     if kayitli is None:
-        flash('Email ya da sifre yanlis' , 'error')
+        return("H-004 Kullanici adi ya da sifresi hatali")
     else:
-        return("basarili")
-
+        dizin = "%s/%s/cihazlar.txt.enc"
+        return dizin
+        
+@app.route("/cihaz_ekle", methods=['POST'])
+def cihaz_ekle():
+    em = request.form['email']
+    sf = request.form['sifre']
+    
+    kayitli = kullanici_onay(em,sf)
+    print "---",kayitli,"---"
+    
+    if kayitli is None:
+        print "hatali"
+        return "H-004  Kullanici adi ya da sifresi hatali"
+    else:
+        print 1
+        cihaz_adi = request.form["cihaz_adi"]
+        print(2, cihaz_adi)
+        try:
+            print 3
+            cihaz_kontrol = Cihaz.query.filter_by(musteri_id = kayitli.id, adi = cihaz_adi).one()
+        except:
+            print 4
+            cihaz_kontrol = None
+        
+        sayisi = Cihaz.query.filter_by(musteri_id = kayitli.id).count()
+        print sayisi
+        if cihaz_kontrol is None:
+            c = Cihaz(no=sayisi+1, adi=cihaz_adi, musteri_id=kayitli.id)
+            db.session.add(c)
+            db.session.commit()
+            return "%d numara ile cihaz %s eklendi" % (sayisi +1 , cihaz_adi)  
+            
+    
+@app.route("/cihaz_listesi", methods=['POST'])
+def cihaz_listesi():
+    em = request.form['email']
+    sf = request.form['sifre']
+    
+    kayitli = kullanici_onay(em,sf)
+    
+    if kayitli is None:
+        return "H-004 Kullanici adi ya da sifresi hatali"
+    else:
+        cihazlar = Cihaz.query.filter_by(musteri_id = kayitli.id).all()
+        t = {}
+        for c in cihazlar:
+            t[c.id] = {"adi":c.adi , "numara":c.no}
+        return json.dumps(t)
+                
+    
 @app.route('/katalog', methods = ['POST'])
 def katalog():
-    kayitli = kullanici_onay(request)
+    em = request.form['email']
+    sf = request.form['sifre']
+    kayitli = kullanici_onay(em,sf)
     if kayitli is None:
         flash('Email ya da sifre yanlis' , 'error')
     else:
