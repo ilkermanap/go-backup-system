@@ -1,4 +1,4 @@
-from flask import Flask,session, request, flash, url_for, redirect, render_template, abort ,g, jsonify
+from flask import Flask,session, request, flash, url_for, redirect, render_template, abort ,g, jsonify, send_from_directory
 from flask.ext.login import login_user , logout_user , current_user , login_required
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
@@ -38,8 +38,9 @@ def kullanici_onay(em,sf):
     return None
 
 class Katalog:
-    def __init__(self, email):
-        self.dizin = "%s/%s" % (BACKUP,hashlib.sha256(email).hexdigest())
+    def __init__(self, email, cihazno = 1):
+        self.dizin = "%s/%s/%d" % (BACKUP,hashlib.sha256(email).hexdigest(), cihazno)
+        self.cihazno = cihazno
         self.dosyalar = {}
         self.dizin_kontrol()
     
@@ -56,6 +57,16 @@ class Katalog:
 
                 t[katalog.split("/")[-1]] = boy
             self.dosyalar[trh] = t
+
+    def katalog_arsivi(self):
+        dizin = self.dizin.replace(BACKUP, "/static")
+	if os.path.isdir(dizin) is False:
+	    os.makedirs(dizin) 
+        dosya = "%s/katalog.tar" % dizin
+        cmd = "cd  %s; tar cf %s */*katalog*" % (self.dizin, dosya)
+	os.system(cmd)
+	return dosya 
+        
 
 
 class Musteri(db.Model):
@@ -127,6 +138,8 @@ def dosya():
     if request.method == "POST":
         email = request.form['email']
         password = request.form['sifre']
+        cihaz = request.form['cihaz']
+        
         kullanici = kullanici_onay(email,password)
         if kullanici is  None:
             return "H-004 Kullanici adi ya da sifresi hatali"
@@ -135,7 +148,7 @@ def dosya():
         file = request.files['file']
         fname = secure_filename(file.filename)
         isim = fname.split("/")[-1]
-        dizin = "%s/%s/%s" % (BACKUP, hashlib.sha256(email).hexdigest(), tarih)
+        dizin = "%s/%s/%s/%s" % (BACKUP, hashlib.sha256(email).hexdigest(),cihaz, tarih)
         os.system("mkdir -p %s" % dizin)
         f = os.path.join(dizin, isim)
         file.save(f)
@@ -175,6 +188,19 @@ def giris():
     return redirect(request.args.get('next') or url_for('index'))
 
 
+@app.route('/kataloglar', methods = ['POST'])
+def kataloglar():
+    em = request.form['email']
+    sf = request.form['sifre']
+    chz = request.form['cihaz']
+    print(type(chz), "<%s>" % chz)
+    kayitli = kullanici_onay(em,sf)
+    if kayitli is None:
+        return("H-004 Kullanici adi ya da sifresi hatali")
+    else:
+	k = Katalog(em, int(chz))
+	return redirect("https://www.verimiz.com/%s" % k.katalog_arsivi())
+
 @app.route('/gonder', methods = ['POST'])
 def gonder():
     em = request.form['email']
@@ -190,30 +216,28 @@ def gonder():
 def cihaz_ekle():
     em = request.form['email']
     sf = request.form['sifre']
-    
+
     kayitli = kullanici_onay(em,sf)
-    print "---",kayitli,"---"
     
     if kayitli is None:
-        print "hatali"
         return "H-004  Kullanici adi ya da sifresi hatali"
     else:
-        print 1
+        dizin = "%s/%s" % (BACKUP, hashlib.sha256(em).hexdigest())    
         cihaz_adi = request.form["cihaz_adi"]
-        print(2, cihaz_adi)
         try:
-            print 3
             cihaz_kontrol = Cihaz.query.filter_by(musteri_id = kayitli.id, adi = cihaz_adi).one()
         except:
-            print 4
             cihaz_kontrol = None
         
         sayisi = Cihaz.query.filter_by(musteri_id = kayitli.id).count()
-        print sayisi
+
         if cihaz_kontrol is None:
             c = Cihaz(no=sayisi+1, adi=cihaz_adi, musteri_id=kayitli.id)
             db.session.add(c)
             db.session.commit()
+            cihaz_dizin = "%s/%d" % (dizin, sayisi + 1 )
+            if not os.path.isdir(cihaz_dizin):
+                os.mkdir(cihaz_dizin)
             return "%d numara ile cihaz %s eklendi" % (sayisi +1 , cihaz_adi)  
             
     
@@ -233,6 +257,10 @@ def cihaz_listesi():
             t[c.id] = {"adi":c.adi , "numara":c.no}
         return json.dumps(t)
                 
+
+@app.route("/son_yedek")
+def son_yedek():
+    return "sonuncu"
     
 @app.route('/katalog', methods = ['POST'])
 def katalog():
