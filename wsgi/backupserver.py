@@ -11,8 +11,10 @@ import os
 import hashlib
 import glob
 import json
-
+import bz2
+from base64 import b64decode, b64encode
 from OpenSSL import SSL
+import tarfile
 context = SSL.Context(SSL.TLSv1_METHOD)
 context.use_privatekey_file('verimiz.key')
 context.use_certificate_file('verimiz.crt') 
@@ -35,7 +37,26 @@ def kullanici_onay(em,sf):
     if u  is not None:
         if u.is_correct_passwd(sf) == True:
             return u
+        else:
+            return -1
     return None
+
+
+class Kataloglar:
+    def __init__(self, email):
+        self.anadizin = "%s/%s" % (BACKUP,hashlib.sha256(email).hexdigest())
+        self.kataloglar = {}
+        self.email = email
+        cihazlar = glob.glob("%s/*" % self.anadizin)
+        for c in cihazlar:
+            try:
+                self.katalog_ekle(int(c.split("/")[-1]))
+            except:
+                pass
+
+    def katalog_ekle(self, cihaz_no):
+        self.kataloglar[cihaz_no] = Katalog(self.email, cihaz_no)
+
 
 class Katalog:
     def __init__(self, email, cihazno = 1):
@@ -49,7 +70,6 @@ class Katalog:
             trh = tarih.split("/")[-1]
             t = {}
             for katalog in glob.glob("%s/*.katalog.*" % tarih):
-                print "----\n",katalog, "\n------"
                 parts = glob.glob(katalog.replace(".katalog.bz2.enc","-*.tar"))
                 boy = 0
                 for p in  parts:
@@ -58,14 +78,59 @@ class Katalog:
                 t[katalog.split("/")[-1]] = boy
             self.dosyalar[trh] = t
 
+    def yedek_hazirla(self, dosyalar):
+        stdizin = self.dizin.replace(BACKUP, "/static")
+        tempdizin = "%s/temp" % stdizin
+
+        if not os.path.isdir(tempdizin):
+            os.makedirs(tempdizin)
+        os.chdir(tempdizin)
+        # dosyalar:  bzip2 compressed dosya listesi
+        # 20160413 11:23:34; uewiou3453eo53oi45uio34u5oi34uoi5u34oi534|2016.....
+        paket = b64decode(dosyalar)
+        acik = bz2.decompress(paket)
+        tar  =  {}
+        eskisi = None
+        outf = "%s/deneme.tar" % tempdizin
+        outtar = tarfile.open(outf, "w")
+        print outf
+        for dosya in acik.split("|")[:-1]:
+            tarih, adi = dosya.split(";")
+            tarih = tarih.replace(":","")
+            tarih = tarih.replace("-","")
+            tarih = tarih.replace(" ","-")
+            if tarih != eskisi:
+                tar = {}
+                eskisi = tarih
+                for f in glob.glob("%s/%s/*.tar" % (self.dizin, tarih)):                    
+                    tar[f] = (tarfile.open(f,"r"), tarfile.open(f,"r").getnames())
+
+
+            for k,v in tar.items():
+                dosyasi = "%s.bz2.enc" % adi
+                if dosyasi in v[1]:
+                    v[0].extract(dosyasi)
+                    outtar.add(dosyasi)
+                    print dosyasi
+                    os.remove(dosyasi)
+                    break
+        outtar.close()
+        return outf
+                
+
+            
+
     def katalog_arsivi(self):
         dizin = self.dizin.replace(BACKUP, "/static")
 	if os.path.isdir(dizin) is False:
 	    os.makedirs(dizin) 
         dosya = "%s/katalog.tar" % dizin
-        cmd = "cd  %s; tar cf %s */*katalog*" % (self.dizin, dosya)
+        cmd = "cd  %s; tar cf %s */*katalog*;sleep 3" % (self.dizin, dosya)
 	os.system(cmd)
-	return dosya 
+        if os.path.isfile(dosya) is True:
+            return dosya
+        else:
+            return "H-005 katalog yok"
         
 
 
@@ -123,13 +188,21 @@ class Cihaz(db.Model):
 def kayit():
     if request.method == 'GET':
         return render_template('kayit.html')
-    musteri = Musteri(request.form['username'],request.form['email'], request.form['password'])
-    db.session.add(musteri)
-    db.session.commit()
-    dizin = "%s/%s" % (BACKUP, hashlib.sha256(request.form['email']).hexdigest())
-    if not os.path.isdir(dizin):
-        os.mkdir(dizin)
-    flash('Kullanici basariyla eklendi')
+
+    k =  kullanici_onay(request.form['email'], request.form['password'])
+    if (k == -1):
+        flash('Email adresi kullanimda.')
+        return render_template('kayit.html')
+    elif (k is not None):
+        return redirect(url_for('giris'))
+    else:
+        musteri = Musteri(request.form['username'],request.form['email'], request.form['password'])
+        db.session.add(musteri)
+        db.session.commit()
+        dizin = "%s/%s" % (BACKUP, hashlib.sha256(request.form['email']).hexdigest())
+        if not os.path.isdir(dizin):
+            os.mkdir(dizin)
+        flash('Kullanici basariyla eklendi')
     return redirect(url_for('giris'))
  
 
@@ -141,7 +214,7 @@ def dosya():
         cihaz = request.form['cihaz']
         
         kullanici = kullanici_onay(email,password)
-        if kullanici is  None:
+        if (kullanici is  None) or (kullanici == -1):
             return "H-004 Kullanici adi ya da sifresi hatali"
         
         tarih = request.form['tarih']
@@ -163,7 +236,10 @@ def kontrol():
         email = request.form['username']
         password = request.form['password']
         k = Musteri.query.filter_by(email=email).first()
-        s = k.is_correct_passwd(password)
+        if k is not None:
+            s = k.is_correct_passwd(password)
+        else:
+            s = False
                 
         if k is None:
             return "H-002 Kullanici tanimsiz"
@@ -179,7 +255,7 @@ def giris():
     email = request.form['username']
     password = request.form['password']
     kayitli = kullanici_onay(email,password)
-    if kayitli is None:
+    if (kayitli is None) or (kullanici == -1):
         flash('Email ya da sifre yanlis' , 'error')
         return redirect(url_for('giris'))
     login_user(kayitli)
@@ -188,25 +264,46 @@ def giris():
     return redirect(request.args.get('next') or url_for('index'))
 
 
+@app.route('/yedek_gerial', methods = ['POST'])
+def yedek_gerial():
+    em = request.form['email']
+    sf = request.form['sifre']
+    chz = request.form['cihaz']
+    dosyalar = request.form['dosyalar']
+    kayitli = kullanici_onay(em,sf)
+    if (kayitli is None) or (kayitli == -1):  
+      return("H-004 Kullanici adi ya da sifresi hatali")
+    else:
+	k = Katalog(em, int(chz))
+        ktl = k.yedek_hazirla(dosyalar)
+        if ktl.startswith("H-005") is True:
+            return "H-005 Katalog yok"
+        else:
+            return "https://www.verimiz.com/%s" % ktl
+
+
 @app.route('/kataloglar', methods = ['POST'])
 def kataloglar():
     em = request.form['email']
     sf = request.form['sifre']
     chz = request.form['cihaz']
-    print(type(chz), "<%s>" % chz)
     kayitli = kullanici_onay(em,sf)
-    if kayitli is None:
+    if (kayitli is None) or (kayitli == -1):
         return("H-004 Kullanici adi ya da sifresi hatali")
     else:
-	k = Katalog(em, int(chz))
-	return redirect("https://www.verimiz.com/%s" % k.katalog_arsivi())
+        k = Katalog(em, int(chz))
+        ktl = k.katalog_arsivi()
+        if ktl.startswith("H-005") is True:
+            return "H-005 Katalog yok"
+        else:
+            return "https://www.verimiz.com/%s" % ktl
 
 @app.route('/gonder', methods = ['POST'])
 def gonder():
     em = request.form['email']
     sf = request.form['sifre']
     kayitli = kullanici_onay(em,sf)
-    if kayitli is None:
+    if (kayitli is None) or (kayitli == -1):
         return("H-004 Kullanici adi ya da sifresi hatali")
     else:
         dizin = "%s/%s/cihazlar.txt.enc"
@@ -219,7 +316,7 @@ def cihaz_ekle():
 
     kayitli = kullanici_onay(em,sf)
     
-    if kayitli is None:
+    if (kayitli is None) or (kayitli == -1):
         return "H-004  Kullanici adi ya da sifresi hatali"
     else:
         dizin = "%s/%s" % (BACKUP, hashlib.sha256(em).hexdigest())    
@@ -248,7 +345,7 @@ def cihaz_listesi():
     
     kayitli = kullanici_onay(em,sf)
     
-    if kayitli is None:
+    if (kayitli is None) or (kayitli == -1):
         return "H-004 Kullanici adi ya da sifresi hatali"
     else:
         cihazlar = Cihaz.query.filter_by(musteri_id = kayitli.id).all()
@@ -267,7 +364,7 @@ def katalog():
     em = request.form['email']
     sf = request.form['sifre']
     kayitli = kullanici_onay(em,sf)
-    if kayitli is None:
+    if (kayitli is None) or (kayitli == -1):
         flash('Email ya da sifre yanlis' , 'error')
     else:
         return("basarili")
@@ -288,7 +385,7 @@ def cikis():
 @app.route('/')
 @login_required
 def index():
-    return render_template('index.html', musteri=Musteri.query.all(), katalog = Katalog(g.user.email))
+    return render_template('index.html', musteri=Musteri.query.all(), katalog = Kataloglar(g.user.email))
 
 
 if __name__ == '__main__':

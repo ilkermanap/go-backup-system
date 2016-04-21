@@ -4,18 +4,22 @@
     <h2>Kataloglar</h2>
     <table class="table table-hover">
       <tr>
+	<th>Cihaz
         <th>Tarih
         <th>dosya
 	<th>boyu
-      {%- for trh, dosyalar  in katalog.dosyalar.items() %}
+     {% for cihaz, ktlg in katalog.kataloglar.items() %}
+      {%- for trh, dosyalar  in ktlg.dosyalar.items() %}
         {%- for  dosya, boy  in dosyalar.items() %}
 
         <tr>
+          <td>{{ cihaz }}</td>	    
           <td>{{ trh }}</td>
           <td> {{ dosya }}</td>
           <td> {{ boy }} MB</td>
         {%- endfor %}
-      {%- endfor %}
+	  {%- endfor %}
+	  {% endfor %}
     </table>
     <p>
 
