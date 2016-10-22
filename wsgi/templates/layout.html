@@ -8,10 +8,10 @@ body {
 	padding-bottom: 100px;
 }
 </style>
-<link href="/static/css/bootstrap.css" rel="stylesheet">
-<link href="/static/css/bootstrap-responsive.css" rel="stylesheet">
-<script src="/static/js/jquery.js"></script>
-<script src="/static/js/bootstrap.js"></script>
+<link href="/portal/static/css/bootstrap.css" rel="stylesheet">
+<link href="/portal/static/css/bootstrap-responsive.css" rel="stylesheet">
+<script src="portal/static/js/jquery.js"></script>
+<script src="/portal/static/js/bootstrap.js"></script>
 
 <div class="navbar navbar-inverse navbar-fixed-top">
 		<div class="navbar-inner">
@@ -24,8 +24,8 @@ body {
 				<a class="brand" href="/">YedekApp</a>
 				<div class="nav-collapse collapse">
 					<ul class="nav">
-						<li class="active"><a href="/">Anasayfa</a></li>
-						<li><a href="/kayit">Yeni kullanici</a></li>
+						<li class="active"><a href="/portal">Anasayfa</a></li>
+						<li><a href="{{ url_for('kayit') }}">Yeni kullanici</a></li>
 						{% if g.user.is_authenticated() %}
   						    <li><a href="{{ url_for('cikis') }}">Cikis</a></li>
 						    <li class="active">{{ g.user.email }} </li>

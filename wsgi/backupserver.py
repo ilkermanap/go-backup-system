@@ -15,9 +15,9 @@ import bz2
 from base64 import b64decode, b64encode
 from OpenSSL import SSL
 import tarfile
-context = SSL.Context(SSL.TLSv1_METHOD)
-context.use_privatekey_file('verimiz.key')
-context.use_certificate_file('verimiz.crt') 
+#context = SSL.Context(SSL.TLSv1_METHOD)
+#context.use_privatekey_file('verimiz.key')
+#context.use_certificate_file('verimiz.crt') 
 
 
 BACKUP = "/storage"
@@ -25,6 +25,7 @@ app = Flask(__name__)
 app.config.from_pyfile('backupserver.cfg')
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
+app.config["PROPAGATE_EXCEPTIONS"]  = True
 
 
 login_manager = LoginManager()
@@ -57,25 +58,37 @@ class Kataloglar:
     def katalog_ekle(self, cihaz_no):
         self.kataloglar[cihaz_no] = Katalog(self.email, cihaz_no)
 
+    def kullanim(self, cihaz = None):
+        t = 0
+        if cihaz is not None:
+            if cihaz in self.kataloglar.keys():
+                return self.kataloglar[cihaz].boy
+            else:
+                return 0
+        else:
+            for k, v in self.kataloglar.items():
+                t += v.boy
+            return t
 
 class Katalog:
     def __init__(self, email, cihazno = 1):
         self.dizin = "%s/%s/%d" % (BACKUP,hashlib.sha256(email).hexdigest(), cihazno)
         self.cihazno = cihazno
         self.dosyalar = {}
+        self.boy = 0
         self.dizin_kontrol()
-    
-    def dizin_kontrol(self):
-        for tarih  in glob.glob("%s/*" % self.dizin):
-            trh = tarih.split("/")[-1]
-            t = {}
-            for katalog in glob.glob("%s/*.katalog.*" % tarih):
-                parts = glob.glob(katalog.replace(".katalog.bz2.enc","-*.tar"))
-                boy = 0
-                for p in  parts:
-                    boy += os.stat(p).st_size / (1000 * 1000 * 1.0)                
 
-                t[katalog.split("/")[-1]] = boy
+    def dizin_kontrol(self):
+        tarihler =  glob.glob("%s/*" % self.dizin)        
+        for tarih  in tarihler:
+            trh = tarih.split("/")[-1]
+            dosyalar =  glob.glob("%s/*" % tarih)
+            boy = 0
+            t = {}
+            for dosya in dosyalar:
+                boy += os.stat(dosya).st_size / (1000 * 1000 * 1.0)                
+            t["%s.katalog.enc" % trh] = boy
+            self.boy += boy
             self.dosyalar[trh] = t
 
     def yedek_hazirla(self, dosyalar):
@@ -107,7 +120,7 @@ class Katalog:
 
 
             for k,v in tar.items():
-                dosyasi = "%s.bz2.enc" % adi
+                dosyasi = "%s.enc" % adi
                 if dosyasi in v[1]:
                     v[0].extract(dosyasi)
                     outtar.add(dosyasi)
@@ -132,8 +145,6 @@ class Katalog:
         else:
             return "H-005 katalog yok"
         
-
-
 class Musteri(db.Model):
     __tablename__ = 'musteri'
     id = db.Column('id', db.Integer,primary_key=True)
@@ -141,6 +152,10 @@ class Musteri(db.Model):
     email = db.Column(db.String(60), unique=True, index=True)
     _passwd = db.Column(db.String(64))
     kayit_tarihi = db.Column('kayit_tarihi' , db.DateTime)
+    plan = db.Column('plan', db.Integer)
+    onay = db.Column('onay', db.Integer)
+    onaytarihi = db.Column('onay_tarihi' , db.DateTime)
+    odemeler = relationship
     cihazlar = relationship
 
     @hybrid_property
@@ -151,11 +166,14 @@ class Musteri(db.Model):
     def _set_passwd(self, plaintext):
         self._passwd = bcrypt.generate_password_hash(plaintext)
 
-    def __init__(self, adi, email, sifre):
+    def __init__(self, adi, email, sifre,plan):
         self.adi = adi
         self.email = email
         self.passwd = sifre
+        self.plan = int(plan)
         self.kayit_tarihi = datetime.utcnow()
+        self.onay = 0
+    
 
     def is_authenticated(self):
         return True
@@ -175,6 +193,15 @@ class Musteri(db.Model):
     def __repr__(self):
         return '<Musteri %r>' % (self.adi)
 
+
+class Odeme(db.Model):
+    __tablename__ = "odeme"
+    id = db.Column("id", db.Integer, primary_key=True)
+    musteri_id = db.Column(db.Integer, db.ForeignKey('musteri.id'))
+    tarih = db.Column('odeme_tarihi' , db.DateTime)
+    miktar = db.Column('miktar' , db.Float)
+    aciklama = db.Column("aciklama", db.String(100))
+    
 class Cihaz(db.Model):
     __tablename__ = "cihaz"
     id = db.Column("id", db.Integer, primary_key=True)
@@ -182,27 +209,46 @@ class Cihaz(db.Model):
     adi = db.Column("cihaz", db.String(100))
     musteri_id = db.Column(db.Integer, db.ForeignKey('musteri.id'))
 
+@app.route('/onay', methods=['GET'])
+def onay():
+    for c in db.session.query(Musteri).all():
+        c.onay=1
+    db.session.commit()
+    return "Onaylandi"
 
-    
 @app.route('/kayit' , methods=['GET','POST'])
 def kayit():
     if request.method == 'GET':
         return render_template('kayit.html')
 
+    fromapp = False
     k =  kullanici_onay(request.form['email'], request.form['password'])
+    if "fromapp" in request.form.keys():
+        print("app'den gelmis  ", k)
+        fromapp = True
     if (k == -1):
-        flash('Email adresi kullanimda.')
-        return render_template('kayit.html')
+        if fromapp:
+            return "H-001 Adres kullamimda"
+        else:
+            flash('Email adresi kullanimda.')
+            return render_template('kayit.html')
     elif (k is not None):
-        return redirect(url_for('giris'))
+        if fromapp:
+            return "H-001 Adres kullamimda"
+        else:
+            return redirect(url_for('giris'))
     else:
-        musteri = Musteri(request.form['username'],request.form['email'], request.form['password'])
+        print("kullanici ekleniyor")
+        musteri = Musteri(request.form['username'],request.form['email'], request.form['password'], request.form['plan'])
         db.session.add(musteri)
         db.session.commit()
         dizin = "%s/%s" % (BACKUP, hashlib.sha256(request.form['email']).hexdigest())
         if not os.path.isdir(dizin):
             os.mkdir(dizin)
-        flash('Kullanici basariyla eklendi')
+        if fromapp:
+            return "T-001 Tamam, kullanici eklendi"
+        else:
+            flash('Kullanici basariyla eklendi')
     return redirect(url_for('giris'))
  
 
@@ -216,18 +262,54 @@ def dosya():
         kullanici = kullanici_onay(email,password)
         if (kullanici is  None) or (kullanici == -1):
             return "H-004 Kullanici adi ya da sifresi hatali"
-        
+        if kullanici.onay == 0:
+	    print "onay yokmus, ", email
+            return "H-006 Henuz kullanici onaylanmamis"
         tarih = request.form['tarih']
         file = request.files['file']
         fname = secure_filename(file.filename)
         isim = fname.split("/")[-1]
         dizin = "%s/%s/%s/%s" % (BACKUP, hashlib.sha256(email).hexdigest(),cihaz, tarih)
+        print "dosya upload:", dizin, isim 
         os.system("mkdir -p %s" % dizin)
         f = os.path.join(dizin, isim)
         file.save(f)
         return os.popen("sha256sum %s" % f, "r").readlines()[0].split()[0].strip()
 
 
+@app.route("/kota", methods=['POST'])
+def kota():
+    if request.method == "GET":
+        return "H-001 Yanlis metod"
+    elif request.method == "POST":
+        email = request.form['email']
+        password = request.form['sifre']
+        k = kullanici_onay(email, password)
+        if (k is not None) and (k != -1):
+            return str(k.plan)
+        else:
+            if (k is None):
+                return "H-002 Kullanici tanimsiz"
+            if ( k == -1):
+                return "H-003 Yanlis sifre"
+
+@app.route("/kullanim", methods=['POST'])
+def kullanim():
+    if request.method == "GET":
+        return "H-001 Yanlis metod"
+    elif request.method == "POST":
+        email = request.form['email']
+        password = request.form['sifre']
+        k = kullanici_onay(email, password)
+        if (k is not None) and (k != -1):
+            kat = Kataloglar(email)
+            return kat.kullanim()
+        else:
+            if (k is None):
+                return "H-002 Kullanici tanimsiz"
+            if ( k == -1):
+                return "H-003 Yanlis sifre"            
+    
 @app.route("/kontrol", methods = ['POST'])
 def kontrol():
     if request.method == "GET":
@@ -245,6 +327,8 @@ def kontrol():
             return "H-002 Kullanici tanimsiz"
         elif s is False:
             return "H-003 Yanlis sifre"
+        elif k.onay == 0:
+            return "H-006 Henuz kullanici onaylanmamis"
         else:
             return "T-001 Tamam"
 
@@ -255,7 +339,7 @@ def giris():
     email = request.form['username']
     password = request.form['password']
     kayitli = kullanici_onay(email,password)
-    if (kayitli is None) or (kullanici == -1):
+    if (kayitli is None) or (kayitli == -1):
         flash('Email ya da sifre yanlis' , 'error')
         return redirect(url_for('giris'))
     login_user(kayitli)
@@ -272,7 +356,7 @@ def yedek_gerial():
     dosyalar = request.form['dosyalar']
     kayitli = kullanici_onay(em,sf)
     if (kayitli is None) or (kayitli == -1):  
-      return("H-004 Kullanici adi ya da sifresi hatali")
+        return("H-004 Kullanici adi ya da sifresi hatali")
     else:
 	k = Katalog(em, int(chz))
         ktl = k.yedek_hazirla(dosyalar)
@@ -390,5 +474,6 @@ def index():
 
 if __name__ == '__main__':
     #db.create_all()
-    app.run(host="0.0.0.0", ssl_context=context, debug=True)
+    #app.run(host="0.0.0.0", ssl_context=context, debug=True)
+    app.run(host="0.0.0.0", debug=True)
     
