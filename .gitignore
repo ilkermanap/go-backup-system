@@ -64,3 +64,10 @@ storage/
 
 # Claude
 .claude/
+# Build outputs
+backup-client/backup-client
+backup-client/test
+go-backup-server/backup-server
+go-backup-server/backup-server-*
+go-backup-server/build/
+yedekleme/
