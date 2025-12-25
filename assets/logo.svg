@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="mainGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5"/>
+      <stop offset="100%" style="stop-color:#7C3AED"/>
+    </linearGradient>
+    <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#06B6D4"/>
+      <stop offset="100%" style="stop-color:#3B82F6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="10" y="10" width="180" height="180" rx="40" fill="url(#mainGradient)"/>
+
+  <!-- Inner circle (clock face) -->
+  <circle cx="100" cy="100" r="55" fill="white" opacity="0.95"/>
+
+  <!-- Clock hour markers -->
+  <g fill="#4F46E5" opacity="0.6">
+    <circle cx="100" cy="55" r="4"/>
+    <circle cx="145" cy="100" r="4"/>
+    <circle cx="100" cy="145" r="4"/>
+    <circle cx="55" cy="100" r="4"/>
+  </g>
+
+  <!-- Clock hands -->
+  <line x1="100" y1="100" x2="100" y2="70" stroke="url(#mainGradient)" stroke-width="5" stroke-linecap="round"/>
+  <line x1="100" y1="100" x2="125" y2="100" stroke="url(#accentGradient)" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Center dot -->
+  <circle cx="100" cy="100" r="7" fill="url(#mainGradient)"/>
+
+  <!-- Circular arrow (backup/sync) -->
+  <path d="M 100 30 A 70 70 0 1 1 35 120"
+        fill="none"
+        stroke="url(#accentGradient)"
+        stroke-width="7"
+        stroke-linecap="round"/>
+
+  <!-- Arrow head -->
+  <polygon points="100,18 112,38 88,38" fill="url(#accentGradient)"/>
+
+  <!-- Small shield icon (security) -->
+  <path d="M 155 140 L 155 158 C 155 172 168 177 168 177 C 168 177 181 172 181 158 L 181 140 L 168 136 Z"
+        fill="white"
+        stroke="url(#mainGradient)"
+        stroke-width="2.5"/>
+  <path d="M 163 154 L 168 159 L 177 148"
+        fill="none"
+        stroke="url(#accentGradient)"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+</svg>
