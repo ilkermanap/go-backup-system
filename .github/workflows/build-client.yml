@@ -37,11 +37,16 @@ jobs:
         working-directory: backup-client
         run: ~/go/bin/wails build -platform darwin/arm64
 
+      - name: Copy LICENSE
+        run: cp LICENSE backup-client/build/bin/
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: backup-client-macos-arm64
-          path: backup-client/build/bin/*.app
+          path: |
+            backup-client/build/bin/*.app
+            backup-client/build/bin/LICENSE
           retention-days: 30
 
   build-linux-amd64:
@@ -75,11 +80,16 @@ jobs:
         working-directory: backup-client
         run: ~/go/bin/wails build -tags webkit2_41
 
+      - name: Copy LICENSE
+        run: cp LICENSE backup-client/build/bin/
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: backup-client-linux-amd64
-          path: backup-client/build/bin/backup-client
+          path: |
+            backup-client/build/bin/backup-client
+            backup-client/build/bin/LICENSE
           retention-days: 30
 
   build-windows-amd64:
@@ -110,9 +120,14 @@ jobs:
           $env:PATH = "$env:USERPROFILE\go\bin;$env:PATH"
           wails build
 
+      - name: Copy LICENSE
+        run: Copy-Item LICENSE backup-client/build/bin/
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: backup-client-windows-amd64
-          path: backup-client/build/bin/*.exe
+          path: |
+            backup-client/build/bin/*.exe
+            backup-client/build/bin/LICENSE
           retention-days: 30
