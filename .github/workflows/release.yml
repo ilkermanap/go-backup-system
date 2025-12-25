@@ -1,0 +1,150 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-macos-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Install frontend dependencies
+        working-directory: backup-client/frontend
+        run: npm install
+
+      - name: Build
+        working-directory: backup-client
+        run: ~/go/bin/wails build -platform darwin/arm64
+
+      - name: Create release archive
+        run: |
+          cd backup-client/build/bin
+          cp ../../../LICENSE .
+          zip -r ../../../backup-client-macos-arm64.zip *.app LICENSE
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-client-macos-arm64
+          path: backup-client-macos-arm64.zip
+
+  build-linux-amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Install frontend dependencies
+        working-directory: backup-client/frontend
+        run: npm install
+
+      - name: Build
+        working-directory: backup-client
+        run: ~/go/bin/wails build -tags webkit2_41
+
+      - name: Create release archive
+        run: |
+          cd backup-client/build/bin
+          cp ../../../LICENSE .
+          tar -czvf ../../../backup-client-linux-amd64.tar.gz backup-client LICENSE
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-client-linux-amd64
+          path: backup-client-linux-amd64.tar.gz
+
+  build-windows-amd64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Install frontend dependencies
+        working-directory: backup-client/frontend
+        run: npm install
+
+      - name: Build
+        working-directory: backup-client
+        run: |
+          $env:PATH = "$env:USERPROFILE\go\bin;$env:PATH"
+          wails build
+
+      - name: Create release archive
+        run: |
+          Copy-Item LICENSE backup-client/build/bin/
+          Compress-Archive -Path backup-client/build/bin/*.exe, backup-client/build/bin/LICENSE -DestinationPath backup-client-windows-amd64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-client-windows-amd64
+          path: backup-client-windows-amd64.zip
+
+  release:
+    needs: [build-macos-arm64, build-linux-amd64, build-windows-amd64]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/backup-client-macos-arm64/backup-client-macos-arm64.zip
+            artifacts/backup-client-linux-amd64/backup-client-linux-amd64.tar.gz
+            artifacts/backup-client-windows-amd64/backup-client-windows-amd64.zip
+            LICENSE
+          generate_release_notes: true
