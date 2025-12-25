@@ -38,6 +38,8 @@ export function GetQuota():Promise<backup.QuotaInfo>;
 
 export function GetServerBackups():Promise<Array<backup.BackupEntry>>;
 
+export function GetServerURL():Promise<string>;
+
 export function GetUsage():Promise<backup.UsageInfo>;
 
 export function HasLocalCatalog():Promise<boolean>;
@@ -49,6 +51,8 @@ export function Login(arg1:string,arg2:string):Promise<main.LoginResult>;
 export function Logout():Promise<void>;
 
 export function RecoverCatalog():Promise<void>;
+
+export function Register(arg1:string,arg2:string,arg3:string,arg4:number):Promise<main.LoginResult>;
 
 export function RegisterDevice(arg1:string):Promise<backup.Device>;
 
@@ -65,6 +69,8 @@ export function SaveConfig(arg1:config.Config):Promise<void>;
 export function SelectDirectory():Promise<string>;
 
 export function SetEncryptionKey(arg1:string):Promise<void>;
+
+export function SetServerURL(arg1:string):Promise<void>;
 
 export function StartBackup():Promise<void>;
 

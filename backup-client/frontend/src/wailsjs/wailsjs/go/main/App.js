@@ -70,6 +70,10 @@ export function GetServerBackups() {
   return window['go']['main']['App']['GetServerBackups']();
 }
 
+export function GetServerURL() {
+  return window['go']['main']['App']['GetServerURL']();
+}
+
 export function GetUsage() {
   return window['go']['main']['App']['GetUsage']();
 }
@@ -92,6 +96,10 @@ export function Logout() {
 
 export function RecoverCatalog() {
   return window['go']['main']['App']['RecoverCatalog']();
+}
+
+export function Register(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['Register'](arg1, arg2, arg3, arg4);
 }
 
 export function RegisterDevice(arg1) {
@@ -124,6 +132,10 @@ export function SelectDirectory() {
 
 export function SetEncryptionKey(arg1) {
   return window['go']['main']['App']['SetEncryptionKey'](arg1);
+}
+
+export function SetServerURL(arg1) {
+  return window['go']['main']['App']['SetServerURL'](arg1);
 }
 
 export function StartBackup() {

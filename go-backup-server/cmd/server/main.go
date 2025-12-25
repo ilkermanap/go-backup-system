@@ -80,6 +80,7 @@ func main() {
 		users.Use(jwtAuth.Middleware(), middleware.AdminMiddleware())
 		{
 			users.GET("", userHandler.List)
+			users.POST("", userHandler.Create)
 			users.GET("/:id", userHandler.Get)
 			users.PATCH("/:id", userHandler.Update)
 			users.DELETE("/:id", userHandler.Delete)

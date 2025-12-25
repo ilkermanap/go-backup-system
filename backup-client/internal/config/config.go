@@ -47,7 +47,7 @@ func NewDefault() *Config {
 	os.MkdirAll(dataDir, 0700)
 
 	return &Config{
-		ServerURL:       "http://localhost:8080",
+		ServerURL:       "", // Empty - user must set this
 		Blacklist:       []string{".mp3", ".mp4", ".wav", ".m4a", ".iso", ".vmdk", ".vdi"},
 		StartTime:       "09:00",
 		EndTime:         "19:00",
@@ -63,11 +63,14 @@ func Load() (*Config, error) {
 
 	data, err := os.ReadFile(cfg.configPath)
 	if err != nil {
-		return nil, err
+		// Config file doesn't exist, save default and return
+		cfg.Save()
+		return cfg, nil
 	}
 
 	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, err
+		// Invalid JSON, return default
+		return cfg, nil
 	}
 
 	return cfg, nil

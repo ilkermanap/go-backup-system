@@ -424,6 +424,10 @@ func (c *Catalog) GetAllFilesWithInfo() ([]CatalogFileInfo, error) {
 // GetFilesAtTimestamp returns files as they were at a specific timestamp
 // For each file, it returns the version that was current at that time (latest version <= timestamp)
 func (c *Catalog) GetFilesAtTimestamp(ts time.Time) ([]CatalogFileInfo, error) {
+	// Add 1 second buffer to handle millisecond precision differences
+	searchTime := ts.Add(time.Second)
+	fmt.Printf("[GetFilesAtTimestamp] ts=%v, searchTime=%v\n", ts, searchTime)
+
 	rows, err := c.db.Query(`
 		SELECT
 			adi,
@@ -438,7 +442,7 @@ func (c *Catalog) GetFilesAtTimestamp(ts time.Time) ([]CatalogFileInfo, error) {
 		)
 		GROUP BY adi
 		ORDER BY dizin, adi
-	`, ts, ts)
+	`, searchTime, searchTime)
 	if err != nil {
 		return nil, err
 	}

@@ -30,13 +30,10 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
 	// Load or create config
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Println("[startup] Config load error, using default:", err)
-		cfg = config.NewDefault()
-	}
+	cfg, _ := config.Load()
 	a.config = cfg
 	fmt.Println("[startup] DataDir:", cfg.DataDir)
+	fmt.Println("[startup] ServerURL:", cfg.ServerURL)
 
 	// Initialize catalog
 	cat, catErr := catalog.New(cfg.DataDir)
@@ -82,6 +79,26 @@ func (a *App) Login(email, password string) (*LoginResult, error) {
 	}, nil
 }
 
+// Register creates a new user account
+func (a *App) Register(name, email, password string, plan int) (*LoginResult, error) {
+	result, err := a.backup.Register(name, email, password, plan)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save credentials after successful registration
+	a.config.Email = email
+	a.config.Password = password
+	a.config.Token = result.Token
+	a.config.Save()
+
+	return &LoginResult{
+		Success: true,
+		User:    result.User,
+		Token:   result.Token,
+	}, nil
+}
+
 // Logout clears the session
 func (a *App) Logout() {
 	a.config.Token = ""
@@ -105,6 +122,22 @@ func (a *App) SaveConfig(cfg *config.Config) error {
 func (a *App) SetEncryptionKey(key string) error {
 	a.config.EncryptionKey = key
 	return a.config.Save()
+}
+
+// SetServerURL sets the server URL and reinitializes the backup service
+func (a *App) SetServerURL(url string) error {
+	a.config.ServerURL = url
+	if err := a.config.Save(); err != nil {
+		return err
+	}
+	// Reinitialize backup service with new URL
+	a.backup = backup.NewService(a.config, a.catalog)
+	return nil
+}
+
+// GetServerURL returns the current server URL
+func (a *App) GetServerURL() string {
+	return a.config.ServerURL
 }
 
 // SelectDirectory opens a directory picker
@@ -444,12 +477,13 @@ func (a *App) GetCatalogFilesAtDate(dateStr string) ([]CatalogFileInfo, error) {
 		return []CatalogFileInfo{}, nil
 	}
 
-	// Parse the date string
-	ts, err := time.Parse("2006-01-02 15:04:05", dateStr)
+	// Parse the date string in local timezone to match database storage
+	ts, err := time.ParseInLocation("2006-01-02 15:04:05", dateStr, time.Local)
 	if err != nil {
 		fmt.Printf("[GetCatalogFilesAtDate] parse error: %v\n", err)
 		return nil, err
 	}
+	fmt.Printf("[GetCatalogFilesAtDate] parsed timestamp: %v\n", ts)
 
 	files, err := a.backup.GetCatalogFilesAtTimestamp(ts)
 	if err != nil {

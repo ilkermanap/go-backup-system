@@ -21,6 +21,14 @@ type UpdateUserRequest struct {
 	Plan int    `json:"plan" binding:"omitempty,min=1,max=200"`
 }
 
+type CreateUserRequest struct {
+	Name     string `json:"name" binding:"required,min=2,max=60"`
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=6"`
+	Plan     int    `json:"plan" binding:"required,min=1,max=200"`
+	Role     string `json:"role" binding:"omitempty,oneof=admin user"`
+}
+
 type UserListResponse struct {
 	ID         uint        `json:"id"`
 	Name       string      `json:"name"`
@@ -71,6 +79,55 @@ func (h *UserHandler) List(c *gin.Context) {
 		Page:    page,
 		PerPage: perPage,
 		Total:   total,
+	})
+}
+
+// POST /api/v1/users
+func (h *UserHandler) Create(c *gin.Context) {
+	var req CreateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		BadRequest(c, err.Error())
+		return
+	}
+
+	// Check if email already exists
+	var existing models.User
+	if err := h.db.Where("email = ?", req.Email).First(&existing).Error; err == nil {
+		BadRequest(c, "Email already exists")
+		return
+	}
+
+	role := models.RoleUser
+	if req.Role == "admin" {
+		role = models.RoleAdmin
+	}
+
+	user := models.User{
+		Name:       req.Name,
+		Email:      req.Email,
+		Role:       role,
+		Plan:       req.Plan,
+		IsApproved: true, // Admin tarafından oluşturulan kullanıcılar otomatik onaylı
+	}
+
+	if err := user.SetPassword(req.Password); err != nil {
+		InternalError(c, "Failed to set password")
+		return
+	}
+
+	if err := h.db.Create(&user).Error; err != nil {
+		InternalError(c, "Failed to create user")
+		return
+	}
+
+	Created(c, UserListResponse{
+		ID:         user.ID,
+		Name:       user.Name,
+		Email:      user.Email,
+		Role:       user.Role,
+		Plan:       user.Plan,
+		IsApproved: user.IsApproved,
+		CreatedAt:  user.CreatedAt.Format("2006-01-02 15:04:05"),
 	})
 }
 

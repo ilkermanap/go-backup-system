@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
-  Table, Button, Space, Tag, message, Card, Typography, Popconfirm
+  Table, Button, Space, Tag, message, Card, Typography, Popconfirm, Modal, Form, Input, Select, InputNumber
 } from 'antd';
 import {
-  CheckOutlined, DeleteOutlined, ExclamationCircleOutlined, CrownOutlined, UserOutlined
+  CheckOutlined, DeleteOutlined, ExclamationCircleOutlined, CrownOutlined, UserOutlined, PlusOutlined
 } from '@ant-design/icons';
-import { getUsers, approveUser, deleteUser } from '../api';
+import { getUsers, approveUser, deleteUser, createUser } from '../api';
 
 const { Title } = Typography;
 
@@ -23,6 +23,9 @@ export default function Users() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20, total: 0 });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [form] = Form.useForm();
 
   const fetchUsers = async (page = 1, pageSize = 20) => {
     setLoading(true);
@@ -62,6 +65,21 @@ export default function Users() {
       fetchUsers(pagination.current, pagination.pageSize);
     } catch (error) {
       message.error('Silme başarısız');
+    }
+  };
+
+  const handleCreate = async (values: { name: string; email: string; password: string; plan: number; role: string }) => {
+    setCreating(true);
+    try {
+      await createUser(values);
+      message.success('Kullanıcı oluşturuldu');
+      setIsModalOpen(false);
+      form.resetFields();
+      fetchUsers(pagination.current, pagination.pageSize);
+    } catch (error: any) {
+      message.error(error.response?.data?.error?.message || 'Oluşturma başarısız');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -134,7 +152,12 @@ export default function Users() {
 
   return (
     <div>
-      <Title level={2}>Kullanıcılar</Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Title level={2} style={{ margin: 0 }}>Kullanıcılar</Title>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsModalOpen(true)}>
+          Kullanıcı Ekle
+        </Button>
+      </div>
       <Card>
         <Table
           dataSource={users}
@@ -149,6 +172,44 @@ export default function Users() {
           onChange={(pag) => fetchUsers(pag.current, pag.pageSize)}
         />
       </Card>
+
+      <Modal
+        title="Yeni Kullanıcı"
+        open={isModalOpen}
+        onCancel={() => { setIsModalOpen(false); form.resetFields(); }}
+        footer={null}
+      >
+        <Form form={form} layout="vertical" onFinish={handleCreate}>
+          <Form.Item name="name" label="Ad Soyad" rules={[{ required: true, message: 'Ad gerekli' }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="email" label="E-posta" rules={[{ required: true, type: 'email', message: 'Geçerli e-posta gerekli' }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="password" label="Parola" rules={[{ required: true, min: 6, message: 'En az 6 karakter' }]}>
+            <Input.Password />
+          </Form.Item>
+          <Form.Item name="plan" label="Plan (GB)" rules={[{ required: true, message: 'Plan gerekli' }]} initialValue={10}>
+            <InputNumber min={1} max={200} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="role" label="Rol" initialValue="user">
+            <Select>
+              <Select.Option value="user">Kullanıcı</Select.Option>
+              <Select.Option value="admin">Admin</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit" loading={creating}>
+                Oluştur
+              </Button>
+              <Button onClick={() => { setIsModalOpen(false); form.resetFields(); }}>
+                İptal
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

@@ -137,6 +137,38 @@ func (s *Service) Login(email, password string) (*LoginResult, error) {
 	return &result.Data, nil
 }
 
+func (s *Service) Register(name, email, password string, plan int) (*LoginResult, error) {
+	body := map[string]interface{}{
+		"name":     name,
+		"email":    email,
+		"password": password,
+		"plan":     plan,
+	}
+
+	resp, err := s.post("/api/v1/auth/register", body, "")
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Success bool        `json:"success"`
+		Data    LoginResult `json:"data"`
+		Error   struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, err
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf(result.Error.Message)
+	}
+
+	return &result.Data, nil
+}
+
 func (s *Service) GetDevices() ([]Device, error) {
 	resp, err := s.get("/api/v1/devices")
 	if err != nil {
@@ -1370,7 +1402,7 @@ func (s *Service) get(path string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func (s *Service) post(path string, body map[string]string, token string) ([]byte, error) {
+func (s *Service) post(path string, body interface{}, token string) ([]byte, error) {
 	jsonBody, _ := json.Marshal(body)
 	url := s.config.ServerURL + path
 
