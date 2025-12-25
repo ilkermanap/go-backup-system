@@ -1,0 +1,21 @@
+// Wails runtime types
+export function EventsOn(eventName: string, callback: (...args: any[]) => void): () => void;
+export function EventsOff(eventName: string, ...additionalEventNames: string[]): void;
+export function EventsEmit(eventName: string, ...args: any[]): void;
+export function WindowReload(): void;
+export function WindowSetTitle(title: string): void;
+export function WindowFullscreen(): void;
+export function WindowUnfullscreen(): void;
+export function WindowMinimise(): void;
+export function WindowUnminimise(): void;
+export function WindowMaximise(): void;
+export function WindowUnmaximise(): void;
+export function WindowToggleMaximise(): void;
+export function WindowSetMinSize(width: number, height: number): void;
+export function WindowSetMaxSize(width: number, height: number): void;
+export function WindowSetSize(width: number, height: number): void;
+export function WindowShow(): void;
+export function WindowHide(): void;
+export function WindowCenter(): void;
+export function WindowSetPosition(x: number, y: number): void;
+export function Quit(): void;

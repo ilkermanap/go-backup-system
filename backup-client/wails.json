@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/wailsapp/wails/master/v2/cmd/wails/wails.schema.json",
+  "name": "backup-client",
+  "outputfilename": "backup-client",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "wailsjsdir": "./frontend/src/wailsjs",
+  "author": {
+    "name": "Ilker",
+    "email": "ilker@example.com"
+  }
+}
