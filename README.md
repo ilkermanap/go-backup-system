@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="Go Backup System Logo" width="150">
+</p>
+
 # Go Backup System
 
 Time Machine tarzinda yedekleme sistemi. Go ile yazilmis sunucu ve Wails (Go + React) ile yazilmis masaustu istemci icermektedir.
@@ -41,4 +45,4 @@ Detayli kurulum icin: [backup-client/README.md](backup-client/README.md)
 
 ## Lisans
 
-MIT License
+GPL v3 - Detaylar icin [LICENSE](LICENSE) dosyasina bakiniz.
