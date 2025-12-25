@@ -35,14 +35,28 @@ type UserListResponse struct {
 	Email      string      `json:"email"`
 	Role       models.Role `json:"role"`
 	Plan       int         `json:"plan"`
+	UsedSpace  int64       `json:"used_space"`
 	IsApproved bool        `json:"is_approved"`
+	IsActive   bool        `json:"is_active"`
 	CreatedAt  string      `json:"created_at"`
+}
+
+type ResetPasswordRequest struct {
+	Password string `json:"password" binding:"required,min=6"`
+}
+
+type BulkDeleteRequest struct {
+	IDs []uint `json:"ids" binding:"required,min=1"`
 }
 
 // GET /api/v1/users
 func (h *UserHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	perPage, _ := strconv.Atoi(c.DefaultQuery("per_page", "20"))
+	search := c.Query("search")
+	status := c.Query("status")       // approved, pending, active, inactive
+	sortBy := c.DefaultQuery("sort", "created_at")
+	sortOrder := c.DefaultQuery("order", "desc")
 
 	if page < 1 {
 		page = 1
@@ -53,24 +67,64 @@ func (h *UserHandler) List(c *gin.Context) {
 
 	offset := (page - 1) * perPage
 
+	query := h.db.Model(&models.User{})
+
+	// Search filter
+	if search != "" {
+		searchPattern := "%" + search + "%"
+		query = query.Where("name LIKE ? OR email LIKE ?", searchPattern, searchPattern)
+	}
+
+	// Status filter
+	switch status {
+	case "approved":
+		query = query.Where("is_approved = ?", true)
+	case "pending":
+		query = query.Where("is_approved = ?", false)
+	case "active":
+		query = query.Where("is_active = ?", true)
+	case "inactive":
+		query = query.Where("is_active = ?", false)
+	}
+
 	var total int64
-	h.db.Model(&models.User{}).Count(&total)
+	query.Count(&total)
+
+	// Sorting
+	validSortFields := map[string]bool{"id": true, "name": true, "email": true, "created_at": true, "plan": true}
+	if !validSortFields[sortBy] {
+		sortBy = "created_at"
+	}
+	if sortOrder != "asc" && sortOrder != "desc" {
+		sortOrder = "desc"
+	}
+	query = query.Order(sortBy + " " + sortOrder)
 
 	var users []models.User
-	if err := h.db.Offset(offset).Limit(perPage).Find(&users).Error; err != nil {
+	if err := query.Offset(offset).Limit(perPage).Find(&users).Error; err != nil {
 		InternalError(c, "Failed to fetch users")
 		return
 	}
 
 	response := make([]UserListResponse, len(users))
 	for i, u := range users {
+		// Calculate used space for each user
+		var usedSpace int64
+		h.db.Model(&models.Backup{}).
+			Joins("JOIN devices ON devices.id = backups.device_id").
+			Where("devices.user_id = ?", u.ID).
+			Select("COALESCE(SUM(backups.size), 0)").
+			Scan(&usedSpace)
+
 		response[i] = UserListResponse{
 			ID:         u.ID,
 			Name:       u.Name,
 			Email:      u.Email,
 			Role:       u.Role,
 			Plan:       u.Plan,
+			UsedSpace:  usedSpace,
 			IsApproved: u.IsApproved,
+			IsActive:   u.IsActive,
 			CreatedAt:  u.CreatedAt.Format("2006-01-02 15:04:05"),
 		}
 	}
@@ -108,6 +162,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 		Role:       role,
 		Plan:       req.Plan,
 		IsApproved: true, // Admin tarafından oluşturulan kullanıcılar otomatik onaylı
+		IsActive:   true,
 	}
 
 	if err := user.SetPassword(req.Password); err != nil {
@@ -126,7 +181,9 @@ func (h *UserHandler) Create(c *gin.Context) {
 		Email:      user.Email,
 		Role:       user.Role,
 		Plan:       user.Plan,
+		UsedSpace:  0,
 		IsApproved: user.IsApproved,
+		IsActive:   user.IsActive,
 		CreatedAt:  user.CreatedAt.Format("2006-01-02 15:04:05"),
 	})
 }
@@ -145,13 +202,22 @@ func (h *UserHandler) Get(c *gin.Context) {
 		return
 	}
 
+	var usedSpace int64
+	h.db.Model(&models.Backup{}).
+		Joins("JOIN devices ON devices.id = backups.device_id").
+		Where("devices.user_id = ?", user.ID).
+		Select("COALESCE(SUM(backups.size), 0)").
+		Scan(&usedSpace)
+
 	Success(c, UserListResponse{
 		ID:         user.ID,
 		Name:       user.Name,
 		Email:      user.Email,
 		Role:       user.Role,
 		Plan:       user.Plan,
+		UsedSpace:  usedSpace,
 		IsApproved: user.IsApproved,
+		IsActive:   user.IsActive,
 		CreatedAt:  user.CreatedAt.Format("2006-01-02 15:04:05"),
 	})
 }
@@ -188,13 +254,22 @@ func (h *UserHandler) Update(c *gin.Context) {
 		return
 	}
 
+	var usedSpace int64
+	h.db.Model(&models.Backup{}).
+		Joins("JOIN devices ON devices.id = backups.device_id").
+		Where("devices.user_id = ?", user.ID).
+		Select("COALESCE(SUM(backups.size), 0)").
+		Scan(&usedSpace)
+
 	Success(c, UserListResponse{
 		ID:         user.ID,
 		Name:       user.Name,
 		Email:      user.Email,
 		Role:       user.Role,
 		Plan:       user.Plan,
+		UsedSpace:  usedSpace,
 		IsApproved: user.IsApproved,
+		IsActive:   user.IsActive,
 		CreatedAt:  user.CreatedAt.Format("2006-01-02 15:04:05"),
 	})
 }
@@ -261,7 +336,123 @@ func (h *UserHandler) Approve(c *gin.Context) {
 		Email:      user.Email,
 		Role:       user.Role,
 		Plan:       user.Plan,
+		UsedSpace:  0,
 		IsApproved: user.IsApproved,
+		IsActive:   user.IsActive,
 		CreatedAt:  user.CreatedAt.Format("2006-01-02 15:04:05"),
 	})
+}
+
+// POST /api/v1/users/:id/reset-password
+func (h *UserHandler) ResetPassword(c *gin.Context) {
+	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		BadRequest(c, "Invalid user ID")
+		return
+	}
+
+	var req ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		BadRequest(c, err.Error())
+		return
+	}
+
+	var user models.User
+	if err := h.db.First(&user, userID).Error; err != nil {
+		NotFound(c, "User not found")
+		return
+	}
+
+	if err := user.SetPassword(req.Password); err != nil {
+		InternalError(c, "Failed to set password")
+		return
+	}
+
+	if err := h.db.Save(&user).Error; err != nil {
+		InternalError(c, "Failed to update password")
+		return
+	}
+
+	Success(c, gin.H{"message": "Password updated successfully"})
+}
+
+// POST /api/v1/users/:id/toggle-status
+func (h *UserHandler) ToggleStatus(c *gin.Context) {
+	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		BadRequest(c, "Invalid user ID")
+		return
+	}
+
+	var user models.User
+	if err := h.db.First(&user, userID).Error; err != nil {
+		NotFound(c, "User not found")
+		return
+	}
+
+	// Don't allow disabling admin users
+	if user.Role == models.RoleAdmin && user.IsActive {
+		BadRequest(c, "Cannot disable admin users")
+		return
+	}
+
+	user.IsActive = !user.IsActive
+	if err := h.db.Save(&user).Error; err != nil {
+		InternalError(c, "Failed to update user status")
+		return
+	}
+
+	var usedSpace int64
+	h.db.Model(&models.Backup{}).
+		Joins("JOIN devices ON devices.id = backups.device_id").
+		Where("devices.user_id = ?", user.ID).
+		Select("COALESCE(SUM(backups.size), 0)").
+		Scan(&usedSpace)
+
+	Success(c, UserListResponse{
+		ID:         user.ID,
+		Name:       user.Name,
+		Email:      user.Email,
+		Role:       user.Role,
+		Plan:       user.Plan,
+		UsedSpace:  usedSpace,
+		IsApproved: user.IsApproved,
+		IsActive:   user.IsActive,
+		CreatedAt:  user.CreatedAt.Format("2006-01-02 15:04:05"),
+	})
+}
+
+// POST /api/v1/users/bulk-delete
+func (h *UserHandler) BulkDelete(c *gin.Context) {
+	var req BulkDeleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		BadRequest(c, err.Error())
+		return
+	}
+
+	// Don't allow deleting admin users
+	var adminCount int64
+	h.db.Model(&models.User{}).Where("id IN ? AND role = ?", req.IDs, models.RoleAdmin).Count(&adminCount)
+	if adminCount > 0 {
+		BadRequest(c, "Cannot delete admin users")
+		return
+	}
+
+	// Delete devices and backups for all users
+	for _, userID := range req.IDs {
+		var devices []models.Device
+		h.db.Where("user_id = ?", userID).Find(&devices)
+		for _, device := range devices {
+			h.db.Where("device_id = ?", device.ID).Delete(&models.Backup{})
+		}
+		h.db.Where("user_id = ?", userID).Delete(&models.Device{})
+		h.db.Where("user_id = ?", userID).Delete(&models.Payment{})
+	}
+
+	if err := h.db.Where("id IN ?", req.IDs).Delete(&models.User{}).Error; err != nil {
+		InternalError(c, "Failed to delete users")
+		return
+	}
+
+	Success(c, gin.H{"message": "Users deleted successfully", "count": len(req.IDs)})
 }

@@ -39,8 +39,25 @@ export const register = (name: string, email: string, password: string, plan: nu
 export const getMe = () => api.get('/auth/me');
 
 // Users
-export const getUsers = (page = 1, perPage = 20) =>
-  api.get(`/users?page=${page}&per_page=${perPage}`);
+export interface UserFilters {
+  page?: number;
+  perPage?: number;
+  search?: string;
+  status?: 'approved' | 'pending' | 'active' | 'inactive';
+  sort?: string;
+  order?: 'asc' | 'desc';
+}
+
+export const getUsers = (filters: UserFilters = {}) => {
+  const params = new URLSearchParams();
+  if (filters.page) params.append('page', filters.page.toString());
+  if (filters.perPage) params.append('per_page', filters.perPage.toString());
+  if (filters.search) params.append('search', filters.search);
+  if (filters.status) params.append('status', filters.status);
+  if (filters.sort) params.append('sort', filters.sort);
+  if (filters.order) params.append('order', filters.order);
+  return api.get(`/users?${params.toString()}`);
+};
 
 export const getUser = (id: number) => api.get(`/users/${id}`);
 
@@ -53,6 +70,13 @@ export const createUser = (data: { name: string; email: string; password: string
   api.post('/users', data);
 
 export const approveUser = (id: number) => api.post(`/users/${id}/approve`);
+
+export const resetPassword = (id: number, password: string) =>
+  api.post(`/users/${id}/reset-password`, { password });
+
+export const toggleUserStatus = (id: number) => api.post(`/users/${id}/toggle-status`);
+
+export const bulkDeleteUsers = (ids: number[]) => api.post('/users/bulk-delete', { ids });
 
 // Devices
 export const getDevices = () => api.get('/devices');

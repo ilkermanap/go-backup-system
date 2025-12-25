@@ -22,6 +22,7 @@ type User struct {
 	Role         Role           `gorm:"size:20;default:user" json:"role"`
 	Plan         int            `gorm:"default:1" json:"plan"` // GB cinsinden kota
 	IsApproved   bool           `gorm:"default:false" json:"is_approved"`
+	IsActive     bool           `gorm:"default:true" json:"is_active"`
 	ApprovedAt   *time.Time     `json:"approved_at,omitempty"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`

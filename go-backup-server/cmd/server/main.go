@@ -81,10 +81,13 @@ func main() {
 		{
 			users.GET("", userHandler.List)
 			users.POST("", userHandler.Create)
+			users.POST("/bulk-delete", userHandler.BulkDelete)
 			users.GET("/:id", userHandler.Get)
 			users.PATCH("/:id", userHandler.Update)
 			users.DELETE("/:id", userHandler.Delete)
 			users.POST("/:id/approve", userHandler.Approve)
+			users.POST("/:id/reset-password", userHandler.ResetPassword)
+			users.POST("/:id/toggle-status", userHandler.ToggleStatus)
 		}
 
 		// Device routes
